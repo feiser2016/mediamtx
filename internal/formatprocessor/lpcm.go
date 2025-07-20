@@ -8,20 +8,22 @@ import (
 	"github.com/bluenviron/gortsplib/v4/pkg/format/rtplpcm"
 	"github.com/pion/rtp"
 
+	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/unit"
 )
 
-type formatProcessorLPCM struct {
-	UDPMaxPayloadSize  int
+type lpcm struct {
+	RTPMaxPayloadSize  int
 	Format             *format.LPCM
 	GenerateRTPPackets bool
+	Parent             logger.Writer
 
 	encoder     *rtplpcm.Encoder
 	decoder     *rtplpcm.Decoder
 	randomStart uint32
 }
 
-func (t *formatProcessorLPCM) initialize() error {
+func (t *lpcm) initialize() error {
 	if t.GenerateRTPPackets {
 		err := t.createEncoder()
 		if err != nil {
@@ -37,9 +39,9 @@ func (t *formatProcessorLPCM) initialize() error {
 	return nil
 }
 
-func (t *formatProcessorLPCM) createEncoder() error {
+func (t *lpcm) createEncoder() error {
 	t.encoder = &rtplpcm.Encoder{
-		PayloadMaxSize: t.UDPMaxPayloadSize - 12,
+		PayloadMaxSize: t.RTPMaxPayloadSize,
 		PayloadType:    t.Format.PayloadTyp,
 		BitDepth:       t.Format.BitDepth,
 		ChannelCount:   t.Format.ChannelCount,
@@ -47,7 +49,7 @@ func (t *formatProcessorLPCM) createEncoder() error {
 	return t.encoder.Init()
 }
 
-func (t *formatProcessorLPCM) ProcessUnit(uu unit.Unit) error { //nolint:dupl
+func (t *lpcm) ProcessUnit(uu unit.Unit) error { //nolint:dupl
 	u := uu.(*unit.LPCM)
 
 	pkts, err := t.encoder.Encode(u.Samples)
@@ -63,7 +65,7 @@ func (t *formatProcessorLPCM) ProcessUnit(uu unit.Unit) error { //nolint:dupl
 	return nil
 }
 
-func (t *formatProcessorLPCM) ProcessRTPPacket( //nolint:dupl
+func (t *lpcm) ProcessRTPPacket( //nolint:dupl
 	pkt *rtp.Packet,
 	ntp time.Time,
 	pts int64,
@@ -78,12 +80,12 @@ func (t *formatProcessorLPCM) ProcessRTPPacket( //nolint:dupl
 	}
 
 	// remove padding
-	pkt.Header.Padding = false
+	pkt.Padding = false
 	pkt.PaddingSize = 0
 
-	if pkt.MarshalSize() > t.UDPMaxPayloadSize {
-		return nil, fmt.Errorf("payload size (%d) is greater than maximum allowed (%d)",
-			pkt.MarshalSize(), t.UDPMaxPayloadSize)
+	if len(pkt.Payload) > t.RTPMaxPayloadSize {
+		return nil, fmt.Errorf("RTP payload size (%d) is greater than maximum allowed (%d)",
+			len(pkt.Payload), t.RTPMaxPayloadSize)
 	}
 
 	// decode from RTP

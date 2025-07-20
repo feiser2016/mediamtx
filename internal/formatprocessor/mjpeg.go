@@ -9,20 +9,22 @@ import (
 	"github.com/bluenviron/gortsplib/v4/pkg/format/rtpmjpeg"
 	"github.com/pion/rtp"
 
+	"github.com/bluenviron/mediamtx/internal/logger"
 	"github.com/bluenviron/mediamtx/internal/unit"
 )
 
-type formatProcessorMJPEG struct {
-	UDPMaxPayloadSize  int
+type mjpeg struct {
+	RTPMaxPayloadSize  int
 	Format             *format.MJPEG
 	GenerateRTPPackets bool
+	Parent             logger.Writer
 
 	encoder     *rtpmjpeg.Encoder
 	decoder     *rtpmjpeg.Decoder
 	randomStart uint32
 }
 
-func (t *formatProcessorMJPEG) initialize() error {
+func (t *mjpeg) initialize() error {
 	if t.GenerateRTPPackets {
 		err := t.createEncoder()
 		if err != nil {
@@ -38,14 +40,14 @@ func (t *formatProcessorMJPEG) initialize() error {
 	return nil
 }
 
-func (t *formatProcessorMJPEG) createEncoder() error {
+func (t *mjpeg) createEncoder() error {
 	t.encoder = &rtpmjpeg.Encoder{
-		PayloadMaxSize: t.UDPMaxPayloadSize - 12,
+		PayloadMaxSize: t.RTPMaxPayloadSize,
 	}
 	return t.encoder.Init()
 }
 
-func (t *formatProcessorMJPEG) ProcessUnit(uu unit.Unit) error { //nolint:dupl
+func (t *mjpeg) ProcessUnit(uu unit.Unit) error { //nolint:dupl
 	u := uu.(*unit.MJPEG)
 
 	// encode into RTP
@@ -62,7 +64,7 @@ func (t *formatProcessorMJPEG) ProcessUnit(uu unit.Unit) error { //nolint:dupl
 	return nil
 }
 
-func (t *formatProcessorMJPEG) ProcessRTPPacket( //nolint:dupl
+func (t *mjpeg) ProcessRTPPacket( //nolint:dupl
 	pkt *rtp.Packet,
 	ntp time.Time,
 	pts int64,
@@ -77,12 +79,12 @@ func (t *formatProcessorMJPEG) ProcessRTPPacket( //nolint:dupl
 	}
 
 	// remove padding
-	pkt.Header.Padding = false
+	pkt.Padding = false
 	pkt.PaddingSize = 0
 
-	if pkt.MarshalSize() > t.UDPMaxPayloadSize {
-		return nil, fmt.Errorf("payload size (%d) is greater than maximum allowed (%d)",
-			pkt.MarshalSize(), t.UDPMaxPayloadSize)
+	if len(pkt.Payload) > t.RTPMaxPayloadSize {
+		return nil, fmt.Errorf("RTP payload size (%d) is greater than maximum allowed (%d)",
+			len(pkt.Payload), t.RTPMaxPayloadSize)
 	}
 
 	// decode from RTP

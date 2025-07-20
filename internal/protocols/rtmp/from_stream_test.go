@@ -8,8 +8,6 @@ import (
 	"github.com/bluenviron/gortsplib/v4/pkg/description"
 	"github.com/bluenviron/gortsplib/v4/pkg/format"
 	"github.com/bluenviron/mediamtx/internal/logger"
-	"github.com/bluenviron/mediamtx/internal/protocols/rtmp/bytecounter"
-	"github.com/bluenviron/mediamtx/internal/protocols/rtmp/message"
 	"github.com/bluenviron/mediamtx/internal/stream"
 	"github.com/bluenviron/mediamtx/internal/test"
 	"github.com/stretchr/testify/require"
@@ -18,7 +16,7 @@ import (
 func TestFromStreamNoSupportedCodecs(t *testing.T) {
 	strm := &stream.Stream{
 		WriteQueueSize:    512,
-		UDPMaxPayloadSize: 1472,
+		RTPMaxPayloadSize: 1450,
 		Desc: &description.Session{Medias: []*description.Media{{
 			Type:    description.MediaTypeVideo,
 			Formats: []format.Format{&format.VP8{}},
@@ -40,7 +38,7 @@ func TestFromStreamNoSupportedCodecs(t *testing.T) {
 func TestFromStreamSkipUnsupportedTracks(t *testing.T) {
 	strm := &stream.Stream{
 		WriteQueueSize:    512,
-		UDPMaxPayloadSize: 1472,
+		RTPMaxPayloadSize: 1450,
 		Desc: &description.Session{Medias: []*description.Media{
 			{
 				Type:    description.MediaTypeVideo,
@@ -75,10 +73,12 @@ func TestFromStreamSkipUnsupportedTracks(t *testing.T) {
 	})
 
 	var buf bytes.Buffer
-	bc := bytecounter.NewReadWriter(&buf)
-	conn := &Conn{mrw: message.NewReadWriter(&buf, bc, false)}
+	c := &dummyConn{
+		rw: &buf,
+	}
+	c.initialize()
 
-	err = FromStream(strm, l, conn, nil, 0)
+	err = FromStream(strm, l, c, nil, 0)
 	require.NoError(t, err)
 	defer strm.RemoveReader(l)
 

@@ -77,7 +77,7 @@ func (f *formatMPEGTS) initialize() bool {
 		return track
 	}
 
-	for _, media := range f.ri.rec.Stream.Desc.Medias {
+	for _, media := range f.ri.stream.Desc.Medias {
 		for _, forma := range media.Formats {
 			clockRate := forma.ClockRate()
 
@@ -87,7 +87,7 @@ func (f *formatMPEGTS) initialize() bool {
 
 				var dtsExtractor *h265.DTSExtractor
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -132,7 +132,7 @@ func (f *formatMPEGTS) initialize() bool {
 
 				var dtsExtractor *h264.DTSExtractor
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -178,7 +178,7 @@ func (f *formatMPEGTS) initialize() bool {
 				firstReceived := false
 				var lastPTS int64
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -217,7 +217,7 @@ func (f *formatMPEGTS) initialize() bool {
 				firstReceived := false
 				var lastPTS int64
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -255,7 +255,7 @@ func (f *formatMPEGTS) initialize() bool {
 					ChannelCount: forma.ChannelCount,
 				})
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -279,16 +279,40 @@ func (f *formatMPEGTS) initialize() bool {
 						)
 					})
 
+			case *rtspformat.KLV:
+				track := addTrack(forma, &mpegts.CodecKLV{
+					Synchronous: true,
+				})
+
+				f.ri.stream.AddReader(
+					f.ri,
+					media,
+					forma,
+					func(u unit.Unit) error {
+						tunit := u.(*unit.KLV)
+						if tunit.Unit == nil {
+							return nil
+						}
+
+						return f.write(
+							timestampToDuration(tunit.PTS, 90000),
+							tunit.NTP,
+							false,
+							true,
+							func() error {
+								return f.mw.WriteKLV(track, multiplyAndDivide(tunit.PTS, 90000, 90000), tunit.Unit)
+							},
+						)
+					})
+
 			case *rtspformat.MPEG4Audio:
 				co := forma.GetConfig()
-				if co == nil {
-					f.ri.Log(logger.Warn, "skipping MPEG-4 audio track: tracks without explicit configuration are not supported")
-				} else {
+				if co != nil {
 					track := addTrack(forma, &mpegts.CodecMPEG4Audio{
 						Config: *co,
 					})
 
-					f.ri.rec.Stream.AddReader(
+					f.ri.stream.AddReader(
 						f.ri,
 						media,
 						forma,
@@ -316,7 +340,7 @@ func (f *formatMPEGTS) initialize() bool {
 			case *rtspformat.MPEG1Audio:
 				track := addTrack(forma, &mpegts.CodecMPEG1Audio{})
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -343,7 +367,7 @@ func (f *formatMPEGTS) initialize() bool {
 			case *rtspformat.AC3:
 				track := addTrack(forma, &mpegts.CodecAC3{})
 
-				f.ri.rec.Stream.AddReader(
+				f.ri.stream.AddReader(
 					f.ri,
 					media,
 					forma,
@@ -385,7 +409,7 @@ func (f *formatMPEGTS) initialize() bool {
 	}
 
 	n := 1
-	for _, medi := range f.ri.rec.Stream.Desc.Medias {
+	for _, medi := range f.ri.stream.Desc.Medias {
 		for _, forma := range medi.Formats {
 			if _, ok := setuppedFormatsMap[forma]; !ok {
 				f.ri.Log(logger.Warn, "skipping track %d (%s)", n, forma.Codec())
@@ -416,7 +440,7 @@ func (f *formatMPEGTS) close() {
 }
 
 func (f *formatMPEGTS) write(
-	dtsDuration time.Duration,
+	dts time.Duration,
 	ntp time.Time,
 	isVideo bool,
 	randomAccess bool,
@@ -430,14 +454,14 @@ func (f *formatMPEGTS) write(
 	case f.currentSegment == nil:
 		f.currentSegment = &formatMPEGTSSegment{
 			f:        f,
-			startDTS: dtsDuration,
+			startDTS: dts,
 			startNTP: ntp,
 		}
 		f.currentSegment.initialize()
 	case (!f.hasVideo || isVideo) &&
 		randomAccess &&
-		(dtsDuration-f.currentSegment.startDTS) >= f.ri.rec.SegmentDuration:
-		f.currentSegment.lastDTS = dtsDuration
+		(dts-f.currentSegment.startDTS) >= f.ri.segmentDuration:
+		f.currentSegment.lastDTS = dts
 		err := f.currentSegment.close()
 		if err != nil {
 			return err
@@ -445,21 +469,21 @@ func (f *formatMPEGTS) write(
 
 		f.currentSegment = &formatMPEGTSSegment{
 			f:        f,
-			startDTS: dtsDuration,
+			startDTS: dts,
 			startNTP: ntp,
 		}
 		f.currentSegment.initialize()
 
-	case (dtsDuration - f.currentSegment.lastFlush) >= f.ri.rec.PartDuration:
+	case (dts - f.currentSegment.lastFlush) >= f.ri.partDuration:
 		err := f.bw.Flush()
 		if err != nil {
 			return err
 		}
 
-		f.currentSegment.lastFlush = dtsDuration
+		f.currentSegment.lastFlush = dts
 	}
 
-	f.currentSegment.lastDTS = dtsDuration
+	f.currentSegment.lastDTS = dts
 
 	return writeCB()
 }

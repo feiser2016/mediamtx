@@ -125,12 +125,13 @@ func (s *httpServer) close() {
 
 func (s *httpServer) checkAuthOutsideSession(ctx *gin.Context, pathName string, publish bool) bool {
 	req := defs.PathAccessRequest{
-		Name:    pathName,
-		Publish: publish,
-		IP:      net.ParseIP(ctx.ClientIP()),
-		Proto:   auth.ProtocolWebRTC,
+		Name:        pathName,
+		Query:       ctx.Request.URL.RawQuery,
+		Publish:     publish,
+		Proto:       auth.ProtocolWebRTC,
+		Credentials: httpp.Credentials(ctx.Request),
+		IP:          net.ParseIP(ctx.ClientIP()),
 	}
-	req.FillFromHTTPRequest(ctx.Request)
 
 	_, err := s.pathManager.FindPathConf(defs.PathFindPathConfReq{
 		AccessRequest: req,
@@ -305,7 +306,11 @@ func (s *httpServer) onPage(ctx *gin.Context, pathName string, publish bool) {
 		return
 	}
 
-	ctx.Header("Cache-Control", "max-age=3600")
+	// Do not cache the HTML page.
+	// This prevents a bug in Firefox in which, when the page
+	// is loaded in an iframe and the iframe is deleted and recreated,
+	// WebRTC is unable to re-establish the connection.
+	ctx.Header("Cache-Control", "no-cache")
 	ctx.Header("Content-Type", "text/html")
 	ctx.Writer.WriteHeader(http.StatusOK)
 

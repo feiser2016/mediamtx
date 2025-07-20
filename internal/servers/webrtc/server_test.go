@@ -54,7 +54,7 @@ func (p *dummyPath) ExternalCmdEnv() externalcmd.Environment {
 func (p *dummyPath) StartPublisher(req defs.PathStartPublisherReq) (*stream.Stream, error) {
 	p.stream = &stream.Stream{
 		WriteQueueSize:     512,
-		UDPMaxPayloadSize:  1472,
+		RTPMaxPayloadSize:  1450,
 		Desc:               req.Desc,
 		GenerateRTPPackets: true,
 		Parent:             test.NilLogger,
@@ -231,15 +231,15 @@ func TestServerPublish(t *testing.T) {
 		FindPathConfImpl: func(req defs.PathFindPathConfReq) (*conf.Path, error) {
 			require.Equal(t, "teststream", req.AccessRequest.Name)
 			require.Equal(t, "param=value", req.AccessRequest.Query)
-			require.Equal(t, "myuser", req.AccessRequest.User)
-			require.Equal(t, "mypass", req.AccessRequest.Pass)
+			require.Equal(t, "myuser", req.AccessRequest.Credentials.User)
+			require.Equal(t, "mypass", req.AccessRequest.Credentials.Pass)
 			return &conf.Path{}, nil
 		},
 		AddPublisherImpl: func(req defs.PathAddPublisherReq) (defs.Path, error) {
 			require.Equal(t, "teststream", req.AccessRequest.Name)
 			require.Equal(t, "param=value", req.AccessRequest.Query)
-			require.Equal(t, "myuser", req.AccessRequest.User)
-			require.Equal(t, "mypass", req.AccessRequest.Pass)
+			require.Equal(t, "myuser", req.AccessRequest.Credentials.User)
+			require.Equal(t, "mypass", req.AccessRequest.Credentials.Pass)
 			return path, nil
 		},
 	}
@@ -508,7 +508,7 @@ func TestServerRead(t *testing.T) {
 
 			strm := &stream.Stream{
 				WriteQueueSize:     512,
-				UDPMaxPayloadSize:  1472,
+				RTPMaxPayloadSize:  1450,
 				Desc:               desc,
 				GenerateRTPPackets: reflect.TypeOf(ca.unit) != reflect.TypeOf(&unit.Generic{}),
 				Parent:             test.NilLogger,
@@ -522,15 +522,15 @@ func TestServerRead(t *testing.T) {
 				FindPathConfImpl: func(req defs.PathFindPathConfReq) (*conf.Path, error) {
 					require.Equal(t, "teststream", req.AccessRequest.Name)
 					require.Equal(t, "param=value", req.AccessRequest.Query)
-					require.Equal(t, "myuser", req.AccessRequest.User)
-					require.Equal(t, "mypass", req.AccessRequest.Pass)
+					require.Equal(t, "myuser", req.AccessRequest.Credentials.User)
+					require.Equal(t, "mypass", req.AccessRequest.Credentials.Pass)
 					return &conf.Path{}, nil
 				},
 				AddReaderImpl: func(req defs.PathAddReaderReq) (defs.Path, *stream.Stream, error) {
 					require.Equal(t, "teststream", req.AccessRequest.Name)
 					require.Equal(t, "param=value", req.AccessRequest.Query)
-					require.Equal(t, "myuser", req.AccessRequest.User)
-					require.Equal(t, "mypass", req.AccessRequest.Pass)
+					require.Equal(t, "myuser", req.AccessRequest.Credentials.User)
+					require.Equal(t, "mypass", req.AccessRequest.Credentials.Pass)
 					return path, strm, nil
 				},
 			}
@@ -655,7 +655,7 @@ func TestServerReadNotFound(t *testing.T) {
 
 	pc, err := pwebrtc.NewPeerConnection(pwebrtc.Configuration{})
 	require.NoError(t, err)
-	defer pc.Close() //nolint:errcheck
+	defer pc.GracefulClose() //nolint:errcheck
 
 	_, err = pc.AddTransceiverFromKind(pwebrtc.RTPCodecTypeVideo)
 	require.NoError(t, err)
@@ -686,7 +686,7 @@ func TestServerPatchNotFound(t *testing.T) {
 
 	pc, err := pwebrtc.NewPeerConnection(pwebrtc.Configuration{})
 	require.NoError(t, err)
-	defer pc.Close() //nolint:errcheck
+	defer pc.GracefulClose() //nolint:errcheck
 
 	_, err = pc.AddTransceiverFromKind(pwebrtc.RTPCodecTypeVideo)
 	require.NoError(t, err)

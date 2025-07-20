@@ -78,6 +78,7 @@ func TestConfFromFile(t *testing.T) {
 			RPICameraBitrate:           5000000,
 			RPICameraProfile:           "main",
 			RPICameraLevel:             "4.1",
+			RPICameraJPEGQuality:       60,
 			RunOnDemandStartTimeout:    5 * Duration(time.Second),
 			RunOnDemandCloseAfter:      10 * Duration(time.Second),
 		}, pa)
@@ -289,18 +290,6 @@ func TestConfErrors(t *testing.T) {
 			"invalid udpMaxPayloadSize",
 			"udpMaxPayloadSize: 5000\n",
 			"'udpMaxPayloadSize' must be less than 1472",
-		},
-		{
-			"invalid strict encryption 1",
-			"rtspEncryption: strict\n" +
-				"rtspTransports: [udp]\n",
-			"strict encryption cannot be used with the UDP transport protocol",
-		},
-		{
-			"invalid strict encryption 2",
-			"rtspEncryption: strict\n" +
-				"rtspTransports: [multicast]\n",
-			"strict encryption cannot be used with the UDP-multicast transport protocol",
 		},
 		{
 			"invalid ICE server",
